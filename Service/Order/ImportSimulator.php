@@ -11,11 +11,13 @@ use Magento\Catalog\Api\ProductRepositoryInterface;
 use Magento\Catalog\Model\Product\Attribute\Source\Status;
 use Magento\Catalog\Model\Product\Type;
 use Magento\Catalog\Model\ResourceModel\Product\CollectionFactory as ProductCollectionFactory;
+use Magento\Framework\App\Area;
 use Magento\Framework\DataObject;
 use Magento\Framework\Exception\LocalizedException;
 use Magento\Framework\Exception\NoSuchEntityException;
 use Magento\Framework\Math\Random;
 use Magento\Sales\Api\Data\OrderInterface;
+use Magento\Store\Model\App\Emulation;
 use Magmodules\Channable\Api\Config\RepositoryInterface as ConfigProvider;
 use Magmodules\Channable\Api\Order\RepositoryInterface as ChannableOrderRepository;
 use Magmodules\Channable\Exceptions\CouldNotImportOrder;
@@ -29,63 +31,30 @@ class ImportSimulator
     /**
      * Available options
      */
-    public const PARAMS = ['country', 'lvb', 'product_id', 'qty'];
+    public const PARAMS = ['country', 'lvb', 'product_id', 'qty', 'currency', 'price'];
 
     /**
      * Exception message
      */
     private const ORDER_IMPORT_DISABLED = 'Order import not enabled for this store (Store ID: %1)';
 
-    /**
-     * @var Import
-     */
-    private $import;
+    private ?int $storeId = null;
+    private Import $import;
+    private ProductRepositoryInterface $productRepository;
+    private ProductCollectionFactory $productCollection;
+    private ConfigProvider $configProvider;
+    private Random $random;
+    private ChannableOrderRepository  $channableOrderRepository;
+    private Emulation $appEmulation;
 
-    /**
-     * @var ProductRepositoryInterface
-     */
-    private $productRepository;
-
-    /**
-     * @var ProductCollectionFactory
-     */
-    private $productCollection;
-
-    /**
-     * @var ConfigProvider
-     */
-    private $configProvider;
-
-    /**
-     * @var Random
-     */
-    private $random;
-
-    /**
-     * @var int
-     */
-    private $storeId;
-
-    /**
-     * @var ChannableOrderRepository
-     */
-    private $channableOrderRepository;
-
-    /**
-     * @param Import $import
-     * @param ProductRepositoryInterface $productRepository
-     * @param ProductCollectionFactory $productCollection
-     * @param ConfigProvider $configProvider
-     * @param Random $random
-     * @param ChannableOrderRepository $channableOrderRepository
-     */
     public function __construct(
         Import $import,
         ProductRepositoryInterface $productRepository,
         ProductCollectionFactory $productCollection,
         ConfigProvider $configProvider,
         Random $random,
-        ChannableOrderRepository $channableOrderRepository
+        ChannableOrderRepository $channableOrderRepository,
+        Emulation $appEmulation
     ) {
         $this->import = $import;
         $this->productRepository = $productRepository;
@@ -93,6 +62,7 @@ class ImportSimulator
         $this->configProvider = $configProvider;
         $this->random = $random;
         $this->channableOrderRepository = $channableOrderRepository;
+        $this->appEmulation = $appEmulation;
     }
 
     /**
@@ -118,7 +88,15 @@ class ImportSimulator
             $storeId
         );
 
-        return $this->import->execute($channableOrder);
+        try {
+            $this->appEmulation->startEnvironmentEmulation($storeId, Area::AREA_FRONTEND, true);
+            return $this->import->execute($channableOrder);
+        } catch (\Exception $exception) {
+            $errorMsg = $exception->getMessage();
+            throw new CouldNotImportOrder(__($errorMsg));
+        } finally {
+            $this->appEmulation->stopEnvironmentEmulation();
+        }
     }
 
     /**
@@ -132,7 +110,8 @@ class ImportSimulator
      */
     public function getTestData(array $params): array
     {
-        $country = !empty($params['country']) ? $params['country'] : 'NL';
+        $country = $params['country'] ?? 'NL';
+        $currency = $params['currency'] ?? 'EUR';
         $product = $this->getProductData($params);
         $random = $this->random->getRandomString(5, '0123456789');
 
@@ -148,23 +127,23 @@ class ImportSimulator
             "shipment_promise" => "2021-09-06 23:00:00000000",
             "customer" => [
                 "gender" => "male",
-                "phone" => "01234567890",
-                "mobile" => "01234567890",
+                "phone" => "+31-(0)123456789",
+                "mobile" => "+31-(0)634567890",
                 "email" => "dontemail@me.net",
                 "first_name" => "Test",
                 "middle_name" => "From",
                 "last_name" => "Channable",
                 "company" => "TestCompany",
+                "business_order" => false,
             ],
             "billing" => [
                 "first_name" => "Test",
                 "middle_name" => "From",
                 "last_name" => "Channable",
                 "company" => "Do Not Ship",
-                "vat_id" => 'NL0001',
                 "email" => "dontemail@me.net",
-                "address_line_1" => "Billing Line 1",
-                "address_line_2" => "Billing Line 2",
+                "address_line_1" => null,
+                "address_line_2" => null,
                 "street" => "Street",
                 "house_number" => 1,
                 "house_number_ext" => "",
@@ -173,6 +152,9 @@ class ImportSimulator
                 "country_code" => $country,
                 "state" => $country == "US" ? "Texas" : "",
                 "state_code" => $country == "US" ? "TX" : "",
+                "vat_number" => "",
+                "vat_id" => "NL123456790B01",
+                "phone" => "+32-0123456789",
             ],
             "shipping" => [
                 "first_name" => "Test",
@@ -190,11 +172,12 @@ class ImportSimulator
                 "country_code" => $country,
                 "state" => $country == "US" ? "Texas" : "",
                 "state_code" => $country == "US" ? "TX" : "",
-                "pickup_point_name" => "Albert Heijn: UTRECHT"
+                "pickup_point_name" => null,
+                "phone" => "+33-0123456789",
             ],
             "price" => [
                 "payment_method" => "bol",
-                "currency" => "EUR",
+                "currency" => $currency,
                 "subtotal" => $product['price'],
                 "payment" => 0,
                 "shipping" => 0,

@@ -1,6 +1,6 @@
 <?php
 /**
- * Copyright © 2019 Magmodules.eu. All rights reserved.
+ * Copyright © Magmodules.eu. All rights reserved.
  * See COPYING.txt for license details.
  */
 
@@ -11,23 +11,21 @@ use Magento\Framework\App\Helper\Context;
 use Magento\Eav\Model\Config as EavConfig;
 use Magento\Eav\Api\AttributeSetRepositoryInterface;
 use Magento\Catalog\Model\Product\Gallery\ReadHandler as GalleryReadHandler;
-use Magento\Catalog\Model\Product\CatalogPrice;
 use Magento\Catalog\Model\Product\Visibility;
 use Magento\Catalog\Model\Product\Media\Config as CatalogProductMediaConfig;
 use Magento\Catalog\Helper\Image as ProductImageHelper;
-use Magento\Catalog\Helper\Data as CatalogHelper;
-use Magento\CatalogRule\Model\ResourceModel\RuleFactory as RuleFactory;
 use Magento\Framework\Filter\FilterManager;
 use Magento\ConfigurableProduct\Model\ResourceModel\Product\Type\Configurable as ConfigurableResource;
 use Magento\GroupedProduct\Model\ResourceModel\Product\Link as GroupedResource;
 use Magento\Bundle\Model\ResourceModel\Selection as BundleResource;
 use Magmodules\Channable\Api\Log\RepositoryInterface as LogRepository;
 use Magmodules\Channable\Service\Product\InventoryData;
+use Magmodules\Channable\Service\Product\MediaData;
+use Magmodules\Channable\Service\Product\PriceData;
+use Magento\Catalog\Model\ResourceModel\Product as ProductResource;
 
 /**
- * Class Product
- *
- * @package Magmodules\Channable\Helper
+ * @deprecated These helper classes will be removed in a future release.
  */
 class Product extends AbstractHelper
 {
@@ -57,10 +55,6 @@ class Product extends AbstractHelper
      */
     private $attributeSet;
     /**
-     * @var CatalogHelper
-     */
-    private $catalogHelper;
-    /**
      * @var ProductImageHelper
      */
     private $productImageHelper;
@@ -73,77 +67,62 @@ class Product extends AbstractHelper
      */
     private $galleryReadHandler;
     /**
-     * @var RuleFactory
-     */
-    private $ruleFactory;
-    /**
      * @var CatalogProductMediaConfig
      */
     private $catalogProductMediaConfig;
     /**
-     * @var CatalogPrice
+     * @var MediaData
      */
-    private $commonPriceModel;
+    private $mediaData;
+    /**
+     * @var PriceData
+     */
+    private $priceData;
     /**
      * @var LogRepository
      */
     private $logger;
+    /**
+     * @var ProductResource
+     */
+    private $productResource;
     /**
      * Array to save attribute options value
      * @var array
      */
     private $attributeOptions = [];
 
-    /**
-     * Product constructor.
-     *
-     * @param Context                         $context
-     * @param GalleryReadHandler              $galleryReadHandler
-     * @param CatalogProductMediaConfig       $catalogProductMediaConfig
-     * @param CatalogHelper                   $catalogHelper
-     * @param ProductImageHelper              $productImageHelper
-     * @param RuleFactory                     $ruleFactory
-     * @param EavConfig                       $eavConfig
-     * @param FilterManager                   $filter
-     * @param AttributeSetRepositoryInterface $attributeSet
-     * @param GroupedResource                 $catalogProductTypeGrouped
-     * @param BundleResource                  $catalogProductTypeBundle
-     * @param ConfigurableResource            $catalogProductTypeConfigurable
-     * @param CatalogPrice                    $commonPriceModel
-     * @param InventoryData                   $inventoryData
-     * @param LogRepository                   $logger
-     */
     public function __construct(
         Context $context,
         GalleryReadHandler $galleryReadHandler,
         CatalogProductMediaConfig $catalogProductMediaConfig,
-        CatalogHelper $catalogHelper,
         ProductImageHelper $productImageHelper,
-        RuleFactory $ruleFactory,
         EavConfig $eavConfig,
         FilterManager $filter,
         AttributeSetRepositoryInterface $attributeSet,
         GroupedResource $catalogProductTypeGrouped,
         BundleResource $catalogProductTypeBundle,
         ConfigurableResource $catalogProductTypeConfigurable,
-        CatalogPrice $commonPriceModel,
         InventoryData $inventoryData,
+        MediaData $mediaData,
+        PriceData $priceData,
+        ProductResource $productResource,
         LogRepository $logger
     ) {
         $this->galleryReadHandler = $galleryReadHandler;
         $this->catalogProductMediaConfig = $catalogProductMediaConfig;
-        $this->catalogHelper = $catalogHelper;
         $this->productImageHelper = $productImageHelper;
-        $this->ruleFactory = $ruleFactory;
         $this->eavConfig = $eavConfig;
         $this->filter = $filter;
         $this->attributeSet = $attributeSet;
         $this->catalogProductTypeConfigurable = $catalogProductTypeConfigurable;
         $this->catalogProductTypeGrouped = $catalogProductTypeGrouped;
         $this->catalogProductTypeBundle = $catalogProductTypeBundle;
-        $this->commonPriceModel = $commonPriceModel;
         $this->inventoryData = $inventoryData;
+        $this->mediaData = $mediaData;
+        $this->priceData = $priceData;
         $this->logger = $logger;
+        $this->productResource = $productResource;
         parent::__construct($context);
     }
 
@@ -208,7 +187,8 @@ class Product extends AbstractHelper
                 $value = $this->getCondition(
                     $attribute['condition'],
                     $productData,
-                    $attribute
+                    $attribute,
+                    $value
                 );
             }
 
@@ -238,24 +218,28 @@ class Product extends AbstractHelper
 
     /**
      * @param \Magento\Catalog\Model\Product $product
-     * @param \Magento\Catalog\Model\Product $parent
-     * @param                                $config
+     * @param \Magento\Catalog\Model\Product|null $parent
+     * @param $config
      *
      * @return bool
      */
     public function validateProduct($product, $parent, $config)
     {
-        $filters = $config['filters'];
-        if (!empty($parent)) {
-            if (!empty($filters['stock'])) {
-                if (!$this->getIsInStock($parent, $config)) {
-                    return false;
-                }
+        $filters = $config['filters'] ?? [];
+
+        if ($parent !== null && !empty($filters['stock'])) {
+            if (!$this->getIsInStock($parent, $config)) {
+                return false;
             }
         }
 
+        $visibilityFilter = $filters['visibility'] ?? [];
+        if (!empty($visibilityFilter) && in_array($product->getVisibility(), $visibilityFilter, true)) {
+            return true;
+        }
+
         if ($product->getVisibility() == Visibility::VISIBILITY_NOT_VISIBLE) {
-            if (empty($parent)) {
+            if ($parent === null) {
                 return false;
             }
         }
@@ -305,6 +289,18 @@ class Product extends AbstractHelper
      */
     public function getAttributeValue($type, $attribute, $config, $product, $simple)
     {
+        // Handle price attributes with currency conversion actions
+        if (!empty($attribute['source']) && $attribute['source'] == 'price' && !empty($attribute['actions'])) {
+            foreach ($attribute['actions'] as $action) {
+                if (preg_match('/^currency_/', $action)) {
+                    $tempConfig = $config;
+                    $tempConfig['attributes']['rendered_price__' . $type] = $attribute;
+                    $tempConfig['attributes']['rendered_price__' . $type]['price_source'] = 'min_price';
+                    $priceData = $this->priceData->execute($tempConfig, $product);
+                    return $priceData[$type] ?? null;
+                }
+            }
+        }
 
         if (!empty($attribute['source']) && ($attribute['source'] == 'attribute_set_name')) {
             $type = 'attribute_set_name';
@@ -320,6 +316,9 @@ class Product extends AbstractHelper
         }
         if (!empty($attribute['source']) && ($attribute['source'] == 'category_ids')) {
             $type = 'category_ids';
+        }
+        if (!empty($attribute['source']) && ($attribute['source'] == 'tier_price')) {
+            $type = 'tier_price';
         }
 
         switch ($type) {
@@ -358,6 +357,9 @@ class Product extends AbstractHelper
             case 'category_ids':
                 $value = $product->getCategoryIds();
                 break;
+            case 'tier_price':
+                $value = $this->priceData->processTierPrice($product, $config);
+                break;
             default:
                 $value = $this->getValue($attribute, $product);
                 break;
@@ -367,7 +369,7 @@ class Product extends AbstractHelper
             if ((!empty($attribute['actions']) || !empty($attribute['max'])) && !is_array($value)) {
                 $value = $this->getFormat($value, $attribute, $config, $product);
             }
-            if (!empty($attribute['suffix'])) {
+            if (!empty($attribute['suffix']) && is_string($value)) {
                 if (!empty($config[$attribute['suffix']])) {
                     $value .= $config[$attribute['suffix']];
                 }
@@ -382,7 +384,7 @@ class Product extends AbstractHelper
 
     /**
      * @param \Magento\Catalog\Model\Product $product
-     * @param \Magento\Catalog\Model\Product $simple
+     * @param \Magento\Catalog\Model\Product|null $simple
      * @param                                $config
      *
      * @return string
@@ -390,39 +392,37 @@ class Product extends AbstractHelper
      */
     public function getProductUrl($product, $simple, $config)
     {
-        $url = null;
-        if ($requestPath = $product->getRequestPath()) {
-            $url = $product->getProductUrl();
-        } else {
-            $url = $config['base_url'] . 'catalog/product/view/id/' . $product->getEntityId();
-        }
+        $url = $product->getRequestPath()
+            ? $product->getProductUrl()
+            : $config['base_url'] . 'catalog/product/view/id/' . $product->getEntityId();
+
         if (!empty($config['utm_code'])) {
-            if ($config['utm_code'][0] != '?') {
-                $url .= '?' . $config['utm_code'];
-            } else {
-                $url .= $config['utm_code'];
-            }
+            $url .= (strpos($config['utm_code'], '?') === 0)
+                ? $config['utm_code']
+                : '?' . $config['utm_code'];
         }
-        if (!empty($simple)) {
-            if ($product->getTypeId() == 'configurable') {
-                if (isset($config['filters']['link']['configurable'])) {
-                    if ($config['filters']['link']['configurable'] == 2) {
-                        $options = $product->getTypeInstance()->getConfigurableAttributesAsArray($product);
-                        foreach ($options as $option) {
-                            if ($id = $simple->getResource()->getAttributeRawValue(
-                                $simple->getId(),
-                                $option['attribute_code'],
-                                $config['store_id']
-                            )
-                            ) {
-                                $urlExtra[] = $option['attribute_id'] . '=' . $id;
-                            }
-                        }
-                    }
+
+        if (
+            $simple !== null &&
+            $product->getTypeId() === 'configurable' &&
+            ($config['filters']['link']['configurable'] ?? null) == 2
+        ) {
+            $urlExtra = [];
+            $options = $product->getTypeInstance()->getConfigurableAttributesAsArray($product);
+
+            foreach ($options as $option) {
+                $value = $this->productResource->getAttributeRawValue(
+                    $simple->getId(),
+                    $option['attribute_code'],
+                    $config['store_id']
+                );
+                if ($value) {
+                    $urlExtra[] = $option['attribute_id'] . '=' . $value;
                 }
             }
-            if (!empty($urlExtra) && !empty($url)) {
-                $url = $url . '#' . implode('&', $urlExtra);
+
+            if (!empty($urlExtra)) {
+                $url .= '#' . implode('&', $urlExtra);
             }
         }
 
@@ -519,9 +519,17 @@ class Product extends AbstractHelper
                     }
                 }
             }
-            $this->galleryReadHandler->execute($product);
+
             $galleryImages = $product->getMediaGallery('images');
+            if (!$galleryImages) {
+                $this->galleryReadHandler->execute($product);
+                $galleryImages = $product->getMediaGallery('images');
+            }
+
             foreach ($galleryImages as $image) {
+                if (!empty($image['media_type']) && $image['media_type'] === 'external-video') {
+                    continue;
+                }
                 if (empty($image['disabled']) || !empty($config['inc_hidden_image'])) {
                     $images[] = $this->catalogProductMediaConfig->getMediaUrl($image['file']);
                 }
@@ -608,9 +616,15 @@ class Product extends AbstractHelper
      */
     public function getAttributeSetName($product)
     {
+        static $attributeSets = [];
+
         try {
-            $attributeSetRepository = $this->attributeSet->get($product->getAttributeSetId());
-            return $attributeSetRepository->getAttributeSetName();
+            if (!isset($attributeSets[$product->getAttributeSetId()])) {
+                $attributeSetName = $this->attributeSet->get($product->getAttributeSetId())->getAttributeSetName();
+                $attributeSets[$product->getAttributeSetId()] = $attributeSetName;
+            }
+
+            return $attributeSets[$product->getAttributeSetId()];
         } catch (\Exception $e) {
             $this->logger->addErrorLog('getAttributeSetName', $e->getMessage());
         }
@@ -627,7 +641,7 @@ class Product extends AbstractHelper
      */
     private function getQtyValue($product)
     {
-        if (in_array($product->getTypeId(), ['bundle','configurable','grouped'])) {
+        if (in_array($product->getTypeId(), ['configurable','grouped'])) {
             return null;
         }
 
@@ -743,46 +757,55 @@ class Product extends AbstractHelper
     }
 
     /**
-     * @param                                $attribute
+     * @param $attribute
      * @param \Magento\Catalog\Model\Product $product
      *
-     * @return string
+     * @return string|array
      */
     public function getValue($attribute, $product)
     {
         try {
-            if ($attribute['type'] == 'media_image') {
-                if ($url = $product->getData($attribute['source'])) {
-                    return $this->catalogProductMediaConfig->getMediaUrl($url);
-                }
+            $source = isset($attribute['source']) ? $attribute['source'] : '';
+            $type = isset($attribute['type']) ? $attribute['type'] : '';
+            $value = $product->getData($source);
+
+            if (is_array($value)) {
+                return $value;
             }
-            if ($attribute['type'] == 'select') {
-                if ($attr = $product->getResource()->getAttribute($attribute['source'])) {
-                    $value = $product->getData($attribute['source']);
-                    $key = $attr->getStoreId() . $attribute['source'] . $value;
-                    if (!isset($this->attributeOptions[$key]) && !array_key_exists($key, $this->attributeOptions)) {
-                        $data = $attr->getSource()->getOptionText($value);
-                        if (!is_array($data)) {
-                            $this->attributeOptions[$key] = (string)$data;
-                        }
-                    }
-                    return $this->attributeOptions[$key];
-                }
+
+            $value = (string)$value;
+
+            if ($type === 'media_image' && $value) {
+                return $this->catalogProductMediaConfig->getMediaUrl($value);
             }
-            if ($attribute['type'] == 'multiselect') {
-                if ($attr = $product->getResource()->getAttribute($attribute['source'])) {
-                    $value_text = [];
-                    $value = (string)$product->getData($attribute['source']);
-                    $key = $attr->getStoreId() . $attribute['source'] . $value;
-                    if (!isset($this->attributeOptions[$key]) && !array_key_exists($key, $this->attributeOptions)) {
-                        $values = explode(',', (string)$product->getData($attribute['source']));
-                        foreach ($values as $value) {
-                            $value_text[] = $attr->getSource()->getOptionText($value);
-                        }
-                        $this->attributeOptions[$key] = implode('/', $value_text);
-                    }
-                    return $this->attributeOptions[$key];
+
+            if (in_array($type, ['select', 'multiselect'], true)) {
+                $attr = $this->productResource->getAttribute($source);
+                if (!$attr) {
+                    return $value;
                 }
+
+                $key = $attr->getStoreId() . $source . $value;
+
+                if (!array_key_exists($key, $this->attributeOptions)) {
+                    if ($type === 'select') {
+                        $optionText = $attr->getSource()->getOptionText($value);
+                        $this->attributeOptions[$key] = is_array($optionText)
+                            ? implode('/', $optionText)
+                            : (string)$optionText;
+                    } elseif ($type === 'multiselect') {
+                        $values = explode(',', $value);
+                        $texts = [];
+
+                        foreach ($values as $v) {
+                            $texts[] = $attr->getSource()->getOptionText($v);
+                        }
+
+                        $this->attributeOptions[$key] = implode('/', $texts);
+                    }
+                }
+
+                return $this->attributeOptions[$key];
             }
         } catch (\Exception $e) {
             $this->logger->addErrorLog('getValue', $e->getMessage());
@@ -852,7 +875,7 @@ class Product extends AbstractHelper
                 $priceConfig = $config['price_config'];
                 $priceConfig['currency'] = explode('_', $actions[0])[1];
                 $priceConfig['exchange_rate'] = $priceConfig['exchange_rate_' . $priceConfig['currency']] ?? 1;
-                $value = $this->processPrice($product, (float)$value, $priceConfig);
+                $value = $this->priceData->processPrice($product, (float)$value, $priceConfig);
             }
         }
         if (!empty($attribute['max'])) {
@@ -869,10 +892,10 @@ class Product extends AbstractHelper
      *
      * @return string
      */
-    public function getCondition($conditions, $product, $attribute)
+    public function getCondition($conditions, $product, $attribute, $value = null)
     {
         $data = null;
-        $value = $product->getData($attribute['source']);
+        $value = $value ?? $product->getData($attribute['source']);
         if ($attribute['source'] == 'is_in_stock') {
             $value = $this->getAvailability($product);
         }
@@ -907,277 +930,10 @@ class Product extends AbstractHelper
     public function getAttributeCollection($type, $config, $product)
     {
         if ($type == 'price') {
-            return $this->getPriceCollection($config, $product);
+            return $this->priceData->execute($config, $product);
         }
 
         return [];
-    }
-
-    /**
-     * @param                                $config
-     * @param \Magento\Catalog\Model\Product $product
-     *
-     * @return array
-     * @SuppressWarnings(PHPMD.CyclomaticComplexity)
-     */
-    public function getPriceCollection($config, $product)
-    {
-        switch ($product->getTypeId()) {
-            case 'configurable':
-                /**
-                 * Check if config has a final_price (data catalog_product_index_price)
-                 * If final_price === null product is not salable (out of stock)
-                 */
-                if ($product->getData('final_price') === null) {
-                    $price = 0;
-                    $finalPrice = 0;
-                } else {
-                    $price = $product->getData('price');
-                    $finalPrice = $product->getData('final_price');
-                    $specialPrice = $product->getSpecialPrice();
-                    $product['min_price'] = $product['min_price'] >= 0 ? $product['min_price'] : null;
-                    $product['max_price'] = $product['max_price'] >= 0 ? $product['max_price'] : null;
-                }
-                break;
-            case 'grouped':
-                $groupedPriceType = null;
-                if (!empty($config['price_config']['grouped_price_type'])) {
-                    $groupedPriceType = $config['price_config']['grouped_price_type'];
-                }
-
-                $groupedPrices = $this->getGroupedPrices($product, $config);
-                $price = $groupedPrices['min_price'];
-                $finalPrice = $groupedPrices['min_price'];
-                $product['min_price'] = $groupedPrices['min_price'];
-                $product['max_price'] = $groupedPrices['max_price'];
-                $product['total_price'] = $groupedPrices['total_price'];
-
-                if ($groupedPriceType == 'max') {
-                    $price = $groupedPrices['max_price'];
-                    $finalPrice = $price;
-                }
-
-                if ($groupedPriceType == 'total') {
-                    $price = $groupedPrices['total_price'];
-                    $finalPrice = $price;
-                }
-
-                break;
-            case 'bundle':
-                $price = $product->getPrice();
-                $finalPrice = $product->getFinalPrice();
-                $specialPrice = $product->getSpecialPrice();
-                $rulePrice = $this->ruleFactory->create()->getRulePrice(
-                    $config['timestamp'],
-                    $config['website_id'],
-                    '',
-                    $product->getId()
-                );
-                if ($rulePrice !== null && $rulePrice !== false) {
-                    $finalPrice = min($finalPrice, $rulePrice);
-                }
-                break;
-            default:
-                if (intval($product->getFinalPrice()) !== 0) {
-                    $price = $product->getPrice();
-                    $finalPrice = $product->getFinalPrice();
-                    $specialPrice = $product->getSpecialPrice();
-                } else {
-                    $finalPrice = $product->getPriceInfo()->getPrice('final_price')->getAmount()->getValue();
-                    $price = $product->getPriceInfo()->getPrice('regular_price')->getAmount()->getValue();
-                    $product['min_price'] = $product->getPriceInfo()->getPrice('final_price')->getMinimalPrice()->getBaseAmount();
-                    $product['max_price'] = $product->getPriceInfo()->getPrice('final_price')->getMaximalPrice()->getBaseAmount();
-                }
-
-                $rulePrice = $this->ruleFactory->create()->getRulePrice(
-                    $config['timestamp'],
-                    $config['website_id'],
-                    '',
-                    $product->getId()
-                );
-
-                if ($rulePrice !== null && $rulePrice !== false) {
-                    $finalPrice = min($finalPrice, $rulePrice);
-                }
-
-                break;
-        }
-        $prices = [];
-        $attributes = $config['attributes'];
-        $config = $config['price_config'];
-        $prices[$config['price']] = $this->processPrice($product, $price, $config);
-
-        if (!empty($config['tax_include_both'])) {
-            $prices[$config['price_excl']] = $this->processPrice($product, $price, $config, false);
-            $prices[$config['price_incl']] = $this->processPrice($product, $price, $config, true);
-        }
-
-        if (isset($finalPrice) && !empty($config['final_price'])) {
-            $prices[$config['final_price']] = $this->processPrice($product, $finalPrice, $config);
-        }
-
-        if (isset($finalPrice) && ($price > $finalPrice) && !empty($config['sales_price'])) {
-            $prices[$config['sales_price']] = $this->processPrice($product, $finalPrice, $config);
-            if (!empty($config['tax_include_both'])) {
-                $prices[$config['sales_price_excl']] = $this->processPrice($product, $finalPrice, $config, false);
-                $prices[$config['sales_price_incl']] = $this->processPrice($product, $finalPrice, $config, true);
-            }
-        }
-
-        if (isset($specialPrice) && ($specialPrice == $finalPrice) && !empty($config['sales_date_range'])) {
-            if ($product->getSpecialFromDate() && $product->getSpecialToDate()) {
-                $from = date('Y-m-d', strtotime($product->getSpecialFromDate()));
-                $to = date('Y-m-d', strtotime($product->getSpecialToDate()));
-                $prices[$config['sales_date_range']] = $from . '/' . $to;
-            }
-        }
-
-        if ($price <= 0) {
-            if (!empty($product['min_price'])) {
-                $minPrice = $product['min_price'];
-                $prices[$config['price']] = $this->processPrice($product, $minPrice, $config);
-                if (!empty($config['tax_include_both'])) {
-                    $prices[$config['price_excl']] = $this->processPrice($product, $minPrice, $config, false);
-                    $prices[$config['price_incl']] = $this->processPrice($product, $minPrice, $config, true);
-                }
-            }
-        }
-
-        if (!empty($product['min_price']) && !empty($config['min_price'])) {
-            if (($finalPrice > 0) && $finalPrice < $product['min_price']) {
-                $prices[$config['min_price']] = $this->processPrice($product, $finalPrice, $config);
-            } else {
-                $prices[$config['min_price']] = $this->processPrice($product, $product['min_price'], $config);
-            }
-        }
-
-        if (!empty($product['max_price']) && !empty($config['max_price'])) {
-            $prices[$config['max_price']] = $this->processPrice($product, $product['max_price'], $config);
-        }
-
-        if (!empty($product['total_price']) && !empty($config['total_price'])) {
-            $prices[$config['total_price']] = $this->processPrice($product, $product['total_price'], $config);
-        }
-
-        if (!empty($config['discount_perc']) && isset($prices[$config['sales_price']])) {
-            if ($prices[$config['price']] > 0) {
-                $discount = ($prices[$config['sales_price']] - $prices[$config['price']]) / $prices[$config['price']];
-                $discount = $discount * -100;
-                if ($discount > 0) {
-                    $prices[$config['discount_perc']] = round($discount, 1) . '%';
-                }
-            }
-        }
-
-        if ($extraRenderedPriceFields = preg_grep('/^rendered_price__/', array_keys($attributes))) {
-            foreach ($extraRenderedPriceFields as $label) {
-                $field = $attributes[$label];
-                $renderCurrency = $field['actions'][0] ? explode('_', $field['actions'][0])[1] : null;
-                if ($renderCurrency !== $config['currency']) {
-                    $newConfig = $config;
-                    $newConfig['currency'] = $renderCurrency;
-                    $newConfig['exchange_rate'] = $config['exchange_rate_' . $renderCurrency] ?? 1;
-                    switch ($field['price_source']) {
-                        case 'price':
-                            $prices[$field['label']] = $this->processPrice($product, $price, $newConfig);
-                            break;
-                        case 'min_price':
-                            $price = $minPrice ?? $price;
-                            $prices[$field['label']] = $this->processPrice($product, $price, $newConfig);
-                            break;
-                        case 'max_price':
-                            $price = $maxPrice ?? $price;
-                            $prices[$field['label']] = $this->processPrice($product, $price, $newConfig);
-                            break;
-                    }
-                } else {
-                    $prices[$field['label']] = $prices[$field['price_source']] ?? null;
-                }
-            }
-        }
-
-        return $prices;
-    }
-
-    /**
-     * @param \Magento\Catalog\Model\Product $product
-     * @param                                $config
-     *
-     * @return array|null
-     */
-    public function getGroupedPrices($product, $config)
-    {
-        $subProducts = $product->getTypeInstance()->getAssociatedProducts($product);
-
-        $minPrice = null;
-        $maxPrice = null;
-        $totalPrice = null;
-
-        foreach ($subProducts as $subProduct) {
-            $subProduct->setWebsiteId($config['website_id']);
-            if ($subProduct->isSalable()) {
-                $price = $this->commonPriceModel->getCatalogPrice($subProduct);
-                if ($price < $minPrice || $minPrice === null) {
-                    $minPrice = $this->commonPriceModel->getCatalogPrice($subProduct);
-                    $product->setTaxClassId($subProduct->getTaxClassId());
-                }
-                if ($price > $maxPrice || $maxPrice === null) {
-                    $maxPrice = $this->commonPriceModel->getCatalogPrice($subProduct);
-                    $product->setTaxClassId($subProduct->getTaxClassId());
-                }
-                if ($subProduct->getQty() > 0) {
-                    $totalPrice += $price * $subProduct->getQty();
-                } else {
-                    $totalPrice += $price;
-                }
-            }
-        }
-
-        return ['min_price' => $minPrice, 'max_price' => $maxPrice, 'total_price' => $totalPrice];
-    }
-
-    /**
-     * @param \Magento\Catalog\Model\Product $product
-     * @param                                $price
-     * @param                                $config
-     * @param                                $includingTax
-     *
-     * @return float|string
-     */
-    public function processPrice($product, $price, $config, $includingTax = null)
-    {
-        if (!empty($config['exchange_rate'])) {
-            $price = $price * $config['exchange_rate'];
-        }
-
-        if ($includingTax !== null) {
-            return $this->formatPrice(
-                $this->catalogHelper->getTaxPrice($product, $price, $includingTax),
-                $config
-            );
-        }
-
-        if (isset($config['incl_vat'])) {
-            $price = $this->catalogHelper->getTaxPrice($product, $price, ['incl_vat']);
-        }
-
-        return $this->formatPrice($price, $config);
-    }
-
-    /**
-     * @param $price
-     * @param $config
-     *
-     * @return string
-     */
-    public function formatPrice($price, $config)
-    {
-        $decimal = isset($config['decimal_point']) ? $config['decimal_point'] : '.';
-        $price = number_format(floatval(str_replace(',', '.', $price)), 2, $decimal, '');
-        if (!empty($config['use_currency']) && ($price >= 0)) {
-            $price .= ' ' . $config['currency'];
-        }
-        return $price;
     }
 
     /**
@@ -1312,5 +1068,21 @@ class Product extends AbstractHelper
         }
 
         return array_unique($parentIds);
+    }
+
+    /**
+     * @return InventoryData
+     */
+    public function getInventoryData()
+    {
+        return $this->inventoryData;
+    }
+
+    /**
+     * @return MediaData
+     */
+    public function getMediaData()
+    {
+        return $this->mediaData;
     }
 }

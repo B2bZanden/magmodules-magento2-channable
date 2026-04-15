@@ -8,6 +8,7 @@ declare(strict_types=1);
 namespace Magmodules\Channable\Model\Config\System;
 
 use Magento\CatalogInventory\Model\Configuration as CatalogInventoryConfiguration;
+use Magento\Shipping\Model\Config as ShippingConfig;
 use Magmodules\Channable\Api\Config\System\OrderInterface;
 use Magento\Tax\Model\Config as TaxConfig;
 
@@ -20,7 +21,7 @@ class OrderRepository extends ReturnsRepository implements OrderInterface
     /**
      * @inheritDoc
      */
-    public function isOrderEnabled(int $storeId = null): bool
+    public function isOrderEnabled(?int $storeId = null): bool
     {
         return $this->isSetFlag(self::XML_PATH_ORDER_ENABLE, $storeId);
     }
@@ -28,7 +29,7 @@ class OrderRepository extends ReturnsRepository implements OrderInterface
     /**
      * @inheritDoc
      */
-    public function getDefaultShippingMethod(int $storeId = null): ?string
+    public function getDefaultShippingMethod(?int $storeId = null): ?string
     {
         return $this->getStoreValue(self::XML_PATH_SHIPPING_METHOD, $storeId);
     }
@@ -36,7 +37,7 @@ class OrderRepository extends ReturnsRepository implements OrderInterface
     /**
      * @inheritDoc
      */
-    public function getCustomShippingMethodLogic(int $storeId = null): array
+    public function getCustomShippingMethodLogic(?int $storeId = null): array
     {
         $shippingMethodCustom = (string)$this->getStoreValue(self::XML_PATH_SHIPPING_CUSTOM, $storeId);
         $shippingMethodCustom = preg_replace('/\s+/', '', $shippingMethodCustom);
@@ -47,7 +48,7 @@ class OrderRepository extends ReturnsRepository implements OrderInterface
     /**
      * @inheritDoc
      */
-    public function getFallbackShippingMethod(int $storeId = null): ?string
+    public function getFallbackShippingMethod(?int $storeId = null): ?string
     {
         return $this->getStoreValue(self::XML_PATH_SHIPPING_METHOD_FALLBACK, $storeId) ?? 'flatrate_flatrate';
     }
@@ -55,15 +56,16 @@ class OrderRepository extends ReturnsRepository implements OrderInterface
     /**
      * @inheritDoc
      */
-    public function getShippingMethodFree(int $storeId = null): bool
+    public function getAdvancedShippingMapping(?int $storeId = null): ?array
     {
-        return $this->isSetFlag(self::XML_PATH_SHIPPING_METHOD_FREE, $storeId);
+        $mapping = $this->getStoreValueArray(self::XML_PATH_ADVANCED_SHIPPING_MAP, $storeId);
+        return $mapping ?: null;
     }
 
     /**
      * @inheritDoc
      */
-    public function createCustomerOnImport(int $storeId = null): bool
+    public function createCustomerOnImport(?int $storeId = null): bool
     {
         return $this->isSetFlag(self::XML_PATH_IMPORT_CUSTOMER, $storeId);
     }
@@ -71,7 +73,7 @@ class OrderRepository extends ReturnsRepository implements OrderInterface
     /**
      * @inheritDoc
      */
-    public function customerGroupForOrderImport(int $storeId = null): ?string
+    public function customerGroupForOrderImport(?int $storeId = null): ?string
     {
         return $this->getStoreValue(self::XML_PATH_CUSTOMER_GROUP_ID, $storeId);
     }
@@ -79,13 +81,13 @@ class OrderRepository extends ReturnsRepository implements OrderInterface
     /**
      * @inheritDoc
      */
-    public function seperateHousenumber(int $storeId = null): bool
+    public function seperateHousenumber(?int $storeId = null): bool
     {
         return $this->isSetFlag(self::XML_PATH_SEPERATE_HOUSENUMBER, $storeId);
     }
 
     /**
-     * {@inheritDoc}
+     * @inheritDoc
      */
     public function getCustomerStreetLines(int $storeId): int
     {
@@ -93,9 +95,9 @@ class OrderRepository extends ReturnsRepository implements OrderInterface
     }
 
     /**
-     * {@inheritDoc}
+     * @inheritDoc
      */
-    public function getNeedsTaxCalulcation(string $type, int $storeId = null): bool
+    public function getNeedsTaxCalculation(string $type, ?int $storeId = null): bool
     {
         if ($type == 'shipping') {
             return $this->isSetFlag(TaxConfig::CONFIG_XML_PATH_SHIPPING_INCLUDES_TAX, (int)$storeId);
@@ -105,9 +107,33 @@ class OrderRepository extends ReturnsRepository implements OrderInterface
     }
 
     /**
-     * {@inheritDoc}
+     * @inheritDoc
      */
-    public function getTaxClassShipping(int $storeId = null): string
+    public function priceIncludesTax(?int $storeId = null): bool
+    {
+        return $this->isSetFlag(TaxConfig::CONFIG_XML_PATH_PRICE_INCLUDES_TAX, (int)$storeId);
+    }
+
+    /**
+     * @inheritDoc
+     */
+    public function shippingIncludesTax(?int $storeId = null): bool
+    {
+        return $this->isSetFlag(TaxConfig::CONFIG_XML_PATH_SHIPPING_INCLUDES_TAX, (int)$storeId);
+    }
+
+    /**
+     * @inheritDoc
+     */
+    public function getShippingOriginCountry(?int $storeId = null): ?string
+    {
+        return $this->getStoreValue(ShippingConfig::XML_PATH_ORIGIN_COUNTRY_ID, (int)$storeId) ?: null;
+    }
+
+    /**
+     * @inheritDoc
+     */
+    public function getTaxClassShipping(?int $storeId = null): string
     {
         return (string)$this->getStoreValue(TaxConfig::CONFIG_XML_PATH_SHIPPING_TAX_CLASS, (int)$storeId);
     }
@@ -115,7 +141,15 @@ class OrderRepository extends ReturnsRepository implements OrderInterface
     /**
      * @inheritDoc
      */
-    public function sendOrderEmailOnImport(int $storeId = null): bool
+    public function isCrossBorderTradeEnabled(?int $storeId = null): bool
+    {
+        return $this->isSetFlag(TaxConfig::CONFIG_XML_PATH_CROSS_BORDER_TRADE_ENABLED, $storeId);
+    }
+
+    /**
+     * @inheritDoc
+     */
+    public function sendOrderEmailOnImport(?int $storeId = null): bool
     {
         return $this->isSetFlag(self::XML_PATH_SEND_ORDER_EMAIL, $storeId);
     }
@@ -123,7 +157,7 @@ class OrderRepository extends ReturnsRepository implements OrderInterface
     /**
      * @inheritDoc
      */
-    public function autoInvoiceOrderOnImport(int $storeId = null): bool
+    public function autoInvoiceOrderOnImport(?int $storeId = null): bool
     {
         return $this->isSetFlag(self::XML_PATH_INVOICE_ORDER, $storeId);
     }
@@ -131,7 +165,7 @@ class OrderRepository extends ReturnsRepository implements OrderInterface
     /**
      * @inheritDoc
      */
-    public function deductFptTax(int $storeId = null): bool
+    public function deductFptTax(?int $storeId = null): bool
     {
         return $this->isSetFlag(self::XML_PATH_DEDUCT_FPT, $storeId);
     }
@@ -139,7 +173,23 @@ class OrderRepository extends ReturnsRepository implements OrderInterface
     /**
      * @inheritDoc
      */
-    public function sendInvoiceEmailOnImport(int $storeId = null): bool
+    public function isBusinessOrderEnabled(?int $storeId = null): bool
+    {
+        return $this->isSetFlag(self::XML_PATH_BUSINESS_ORDER, $storeId);
+    }
+
+    /**
+     * @inheritDoc
+     */
+    public function isTransactionFeeEnabled(?int $storeId = null): bool
+    {
+        return $this->isSetFlag(self::XML_PATH_TRANSACTION_FEE, $storeId);
+    }
+
+    /**
+     * @inheritDoc
+     */
+    public function sendInvoiceEmailOnImport(?int $storeId = null): bool
     {
         return $this->isSetFlag(self::XML_PATH_SEND_INVOICE, $storeId);
     }
@@ -147,7 +197,7 @@ class OrderRepository extends ReturnsRepository implements OrderInterface
     /**
      * @inheritDoc
      */
-    public function updateOrderStatusAfterImport(int $storeId = null): bool
+    public function updateOrderStatusAfterImport(?int $storeId = null): bool
     {
         return $this->isSetFlag(self::XML_PATH_USE_CUSTOM_STATUS, $storeId);
     }
@@ -155,7 +205,7 @@ class OrderRepository extends ReturnsRepository implements OrderInterface
     /**
      * @inheritDoc
      */
-    public function getOrderProcessingStatus(int $storeId = null): ?string
+    public function getOrderProcessingStatus(?int $storeId = null): ?string
     {
         return $this->getStoreValue(self::XML_PATH_CUSTOM_STATUS, $storeId);
     }
@@ -163,7 +213,7 @@ class OrderRepository extends ReturnsRepository implements OrderInterface
     /**
      * @inheritDoc
      */
-    public function useChannelOrderAsOrderIncrementId(int $storeId = null): bool
+    public function useChannelOrderAsOrderIncrementId(?int $storeId = null): bool
     {
         return $this->isSetFlag(self::XML_PATH_USE_CHANNEL_ORDERID, $storeId);
     }
@@ -171,7 +221,7 @@ class OrderRepository extends ReturnsRepository implements OrderInterface
     /**
      * @inheritDoc
      */
-    public function getOrderIdPrefix(int $storeId = null): ?string
+    public function getOrderIdPrefix(?int $storeId = null): ?string
     {
         return $this->getStoreValue(self::XML_PATH_ORDERID_PREFIX, $storeId);
     }
@@ -179,7 +229,7 @@ class OrderRepository extends ReturnsRepository implements OrderInterface
     /**
      * @inheritDoc
      */
-    public function stripChannelId(int $storeId = null): bool
+    public function stripChannelId(?int $storeId = null): bool
     {
         return $this->isSetFlag(self::XML_PATH_ORDERID_ALPHANUMERIC, $storeId);
     }
@@ -187,7 +237,7 @@ class OrderRepository extends ReturnsRepository implements OrderInterface
     /**
      * @inheritDoc
      */
-    public function importCompanyName(int $storeId = null): bool
+    public function importCompanyName(?int $storeId = null): bool
     {
         return $this->isSetFlag(self::XML_PATH_IMPORT_COMPANY_NAME, $storeId);
     }
@@ -195,7 +245,7 @@ class OrderRepository extends ReturnsRepository implements OrderInterface
     /**
      * @inheritDoc
      */
-    public function isCompanyRequired(int $storeId = null): bool
+    public function isCompanyRequired(?int $storeId = null): bool
     {
         return $this->getStoreValue(self::XML_PATH_IS_COMPANY_REQUIRED, $storeId) == 'req';
     }
@@ -203,7 +253,7 @@ class OrderRepository extends ReturnsRepository implements OrderInterface
     /**
      * @inheritDoc
      */
-    public function disableStockCheckOnImport(int $storeId = null): bool
+    public function disableStockCheckOnImport(?int $storeId = null): bool
     {
         return $this->isSetFlag(self::XML_PATH_ENABLE_BACKORDERS, $storeId);
     }
@@ -211,7 +261,7 @@ class OrderRepository extends ReturnsRepository implements OrderInterface
     /**
      * @inheritDoc
      */
-    public function acceptLvbOrder(int $storeId = null): bool
+    public function acceptLvbOrder(?int $storeId = null): bool
     {
         return $this->isSetFlag(self::XML_PATH_LVB_ENABLED, $storeId);
     }
@@ -219,7 +269,7 @@ class OrderRepository extends ReturnsRepository implements OrderInterface
     /**
      * @inheritDoc
      */
-    public function disableStockMovementForLvbOrders(int $storeId = null): bool
+    public function disableStockMovementForLvbOrders(?int $storeId = null): bool
     {
         return $this->isSetFlag(self::XML_PATH_LVB_SKIP_STOCK, $storeId);
     }
@@ -227,7 +277,7 @@ class OrderRepository extends ReturnsRepository implements OrderInterface
     /**
      * @inheritDoc
      */
-    public function autoShipLvbOrders(int $storeId = null): bool
+    public function autoShipLvbOrders(?int $storeId = null): bool
     {
         return $this->isSetFlag(self::XML_PATH_LVB_AUTO_SHIP, $storeId);
     }
@@ -235,13 +285,13 @@ class OrderRepository extends ReturnsRepository implements OrderInterface
     /**
      * @inheritDoc
      */
-    public function logOrderImport(int $storeId = null): bool
+    public function logOrderImport(?int $storeId = null): bool
     {
         return $this->isSetFlag(self::XML_PATH_LOG, $storeId);
     }
 
     /**
-     * {@inheritDoc}
+     * @inheritDoc
      */
     public function getWebhookUrl(int $storeId): string
     {
@@ -254,7 +304,7 @@ class OrderRepository extends ReturnsRepository implements OrderInterface
     }
 
     /**
-     * {@inheritDoc}
+     * @inheritDoc
      */
     public function getStatusUrl(int $storeId): string
     {
@@ -266,9 +316,9 @@ class OrderRepository extends ReturnsRepository implements OrderInterface
     }
 
     /**
-     * {@inheritDoc}
+     * @inheritDoc
      */
-    public function getCarrierTitle(int $storeId = null): string
+    public function getCarrierTitle(?int $storeId = null): string
     {
         if ($this->isSetFlag(self::XML_PATH_CARRIER_OVERWRITE_TITLE, $storeId)) {
             return '{{channable_channel_label}}';
@@ -278,9 +328,9 @@ class OrderRepository extends ReturnsRepository implements OrderInterface
     }
 
     /**
-     * {@inheritDoc}
+     * @inheritDoc
      */
-    public function getCarrierName(int $storeId = null): string
+    public function getCarrierName(?int $storeId = null): string
     {
         if ($this->isSetFlag(self::XML_PATH_CARRIER_OVERWRITE_NAME, $storeId)) {
             return '{{shipment_method}}';
@@ -290,17 +340,17 @@ class OrderRepository extends ReturnsRepository implements OrderInterface
     }
 
     /**
-     * {@inheritDoc}
+     * @inheritDoc
      */
-    public function getEnableBackorders(int $storeId = null): int
+    public function getEnableBackorders(?int $storeId = null): int
     {
         return (int)$this->getStoreValue(self::XML_PATH_ENABLE_BACKORDERS, $storeId);
     }
 
     /**
-     * {@inheritDoc}
+     * @inheritDoc
      */
-    public function getDefaultManageStock($storeId = null): bool
+    public function getDefaultManageStock(?int $storeId = null): bool
     {
         return $this->isSetFlag(CatalogInventoryConfiguration::XML_PATH_MANAGE_STOCK, $storeId);
     }
@@ -308,7 +358,7 @@ class OrderRepository extends ReturnsRepository implements OrderInterface
     /**
      * @inheritDoc
      */
-    public function useReturnLabel(int $storeId = null): ?string
+    public function useReturnLabel(?int $storeId = null): ?string
     {
         return $this->getStoreValue(self::XML_PATH_RETURN_LABEL, $storeId);
     }
@@ -316,7 +366,7 @@ class OrderRepository extends ReturnsRepository implements OrderInterface
     /**
      * @inheritDoc
      */
-    public function getReturnLabelRegexp(int $storeId = null): array
+    public function getReturnLabelRegexp(?int $storeId = null): array
     {
         return $this->getStoreValueArray(self::XML_PATH_RETURN_LABEL_REGEXP, $storeId);
     }
@@ -324,7 +374,7 @@ class OrderRepository extends ReturnsRepository implements OrderInterface
     /**
      * @inheritDoc
      */
-    public function importGroupedProducts(int $storeId = null): bool
+    public function importGroupedProducts(?int $storeId = null): bool
     {
         return $this->isSetFlag(self::XML_PATH_ENABLE_GROUPED_PRODUCTS, $storeId);
     }
@@ -332,7 +382,7 @@ class OrderRepository extends ReturnsRepository implements OrderInterface
     /**
      * @inheritDoc
      */
-    public function importBundleProducts(int $storeId = null): bool
+    public function importBundleProducts(?int $storeId = null): bool
     {
         return $this->isSetFlag(self::XML_PATH_ENABLE_BUNDLE_PRODUCTS, $storeId);
     }

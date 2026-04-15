@@ -24,6 +24,8 @@ interface DataInterface extends ExtensibleDataInterface
     public const CHANNABLE_ID = 'channable_id';
     public const MAGENTO_ORDER_ID = 'magento_order_id';
     public const MAGENTO_INCREMENT_ID = 'magento_increment_id';
+    public const MAGENTO_CREDITMEMO_ID = 'magento_creditmemo_id';
+    public const MAGENTO_CREDITMEMO_INCREMENT_ID = 'magento_creditmemo_increment_id';
     public const ITEM = 'item';
     public const CUSTOMER_NAME = 'customer_name';
     public const CUSTOMER = 'customer';
@@ -31,6 +33,10 @@ interface DataInterface extends ExtensibleDataInterface
     public const REASON = 'reason';
     public const COMMENT = 'comment';
     public const STATUS = 'status';
+    public const CHANNEL_RETURN_ID = 'channel_return_id';
+    public const CHANNEL_ORDER_ID = 'channel_order_id';
+    public const CHANNEL_ORDER_ID_INTERNAL = 'channel_order_id_internal';
+    public const PLATFORM_ORDER_ID = 'platform_order_id';
     public const CREATED_AT = 'created_at';
     public const UPDATED_AT = 'updated_at';
 
@@ -84,7 +90,7 @@ interface DataInterface extends ExtensibleDataInterface
     public function setChannelId($channelId): self;
 
     /**
-     * @return string
+     * @return int
      */
     public function getChannableId(): int;
 
@@ -95,15 +101,15 @@ interface DataInterface extends ExtensibleDataInterface
     public function setChannableId(int $channableId): self;
 
     /**
-     * @return int
+     * @return int|null
      */
-    public function getMagentoOrderId(): int;
+    public function getMagentoOrderId(): ?int;
 
     /**
-     * @param int $magentoOrderId
+     * @param int|null $magentoOrderId
      * @return $this
      */
-    public function setMagentoOrderId(int $magentoOrderId): self;
+    public function setMagentoOrderId(?int $magentoOrderId): self;
 
     /**
      * @return string
@@ -115,6 +121,28 @@ interface DataInterface extends ExtensibleDataInterface
      * @return $this
      */
     public function setMagentoIncrementId(string $magentoIncrementId): self;
+
+    /**
+     * @return int|null
+     */
+    public function getMagentoCreditmemoId(): ?int;
+
+    /**
+     * @param int|null $magentoCreditmemoId
+     * @return $this
+     */
+    public function setMagentoCreditmemoId(?int $magentoCreditmemoId): self;
+
+    /**
+     * @return string
+     */
+    public function getMagentoCreditmemoIncrementId(): string;
+
+    /**
+     * @param string $magentoIncrementId
+     * @return $this
+     */
+    public function setMagentoCreditmemoIncrementId(string $magentoIncrementId): self;
 
     /**
      * @return array
@@ -192,6 +220,50 @@ interface DataInterface extends ExtensibleDataInterface
      * @return $this
      */
     public function setStatus(string $status): self;
+
+    /**
+     * @return string|null
+     */
+    public function getChannelReturnId(): ?string;
+
+    /**
+     * @param string|null $channelReturnId
+     * @return $this
+     */
+    public function setChannelReturnId(?string $channelReturnId): self;
+
+    /**
+     * @return string|null
+     */
+    public function getChannelOrderId(): ?string;
+
+    /**
+     * @param string|null $channelOrderId
+     * @return $this
+     */
+    public function setChannelOrderId(?string $channelOrderId): self;
+
+    /**
+     * @return string|null
+     */
+    public function getChannelOrderIdInternal(): ?string;
+
+    /**
+     * @param string|null $channelOrderIdInternal
+     * @return $this
+     */
+    public function setChannelOrderIdInternal(?string $channelOrderIdInternal): self;
+
+    /**
+     * @return string|null
+     */
+    public function getPlatformOrderId(): ?string;
+
+    /**
+     * @param string|null $platformOrderId
+     * @return $this
+     */
+    public function setPlatformOrderId(?string $platformOrderId): self;
 
     /**
      * @return string

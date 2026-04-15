@@ -57,6 +57,25 @@ class AddPaymentData
             $payment->setAdditionalInformation('shipment_promise', $orderData['shipment_promise']);
         }
 
+        if (!empty($orderData['shipping']['shipping_center_id'])) {
+            $payment->setAdditionalInformation('shipping_center_id', $orderData['shipping']['shipping_center_id']);
+        }
+
+        if ($orderData['price']['payment_method'] == 'Zalando') {
+            $externalArticleNumbers = [];
+            foreach ($orderData['products'] as $product) {
+                $externalArticleNumbers[] = $product['article_number'] ?? null;
+            }
+            $payment->setAdditionalInformation(
+                'external_article_numbers',
+                implode(', ', array_filter($externalArticleNumbers))
+            );
+        }
+
+        if (!empty($orderData['shipment_promise'])) {
+            $payment->setAdditionalInformation('shipment_promise', $orderData['shipment_promise']);
+        }
+
         $commissionValue = isset($orderData['price']['commission']) ? $orderData['price']['commission'] : 0;
         $commission = $orderData['price']['currency'] . ' ' . $commissionValue;
         $payment->setAdditionalInformation('commission', $commission);

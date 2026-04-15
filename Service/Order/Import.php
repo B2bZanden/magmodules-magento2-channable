@@ -10,8 +10,9 @@ namespace Magmodules\Channable\Service\Order;
 use Exception;
 use Magento\CatalogInventory\Observer\ItemsForReindex;
 use Magento\Checkout\Model\Session as CheckoutSession;
+use Magento\Framework\Event\ManagerInterface;
 use Magento\Framework\Exception\LocalizedException;
-use Magento\Framework\Serialize\Serializer\Json;
+use Magento\Quote\Api\CartRepositoryInterface;
 use Magento\Quote\Model\QuoteManagement;
 use Magento\Sales\Api\Data\OrderInterface;
 use Magento\Sales\Api\OrderRepositoryInterface;
@@ -22,129 +23,38 @@ use Magmodules\Channable\Api\Order\Data\DataInterface as ChannableOrderData;
 use Magmodules\Channable\Api\Order\RepositoryInterface as ChannableOrderRepository;
 use Magmodules\Channable\Exceptions\CouldNotImportOrder;
 use Magmodules\Channable\Model\Config\Source\Status;
+use Magmodules\Channable\Service\Order\Currency\Converter as CurrencyConverter;
 
 /**
  * Class Order Import
  */
 class Import
 {
-    /**
-     * Exception messages
-     */
     private const LVB_AUTO_SHIP_MESSAGE = 'LVB Order, automatically shipped';
     private const COULD_NOT_IMPORT_ORDER = 'Could not import order %1: %2';
 
-    /**
-     * @var ConfigProvider
-     */
-    private $configProvider;
+    protected CartRepositoryInterface $quoteRepository;
+    private ConfigProvider $configProvider;
+    private StoreManagerInterface $storeManager;
+    private QuoteManagement $quoteManagement;
+    private OrderRepositoryInterface $orderRepository;
+    private CheckoutSession $checkoutSession;
+    private ItemsForReindex $itemsForReindex;
+    private Items\Add $addItems;
+    private Quote\Create $createQuote;
+    private Shipping\CalculatePrice $calculateShippingPrice;
+    private Shipping\SetShippingMethod $setShippingMethod;
+    private Process\CreateInvoice $createInvoice;
+    private Process\SendOrderEmail $sendOrderEmail;
+    private Process\CreateShipment $createShipment;
+    private Process\AddPaymentData $addPaymentData;
+    private Process\GetCustomIncrementId $getCustomIncrementId;
+    private ChannableOrderRepository $channableOrderRepository;
+    private Shipping\GetDescription $getShippingDescription;
+    private ManagerInterface $eventManager;
+    private LoggerRepository $logger;
+    private CurrencyConverter $currencyConverter;
 
-    /**
-     * @var StoreManagerInterface
-     */
-    private $storeManager;
-
-    /**
-     * @var QuoteManagement
-     */
-    private $quoteManagement;
-
-    /**
-     * @var OrderRepositoryInterface
-     */
-    private $orderRepository;
-
-    /**
-     * @var CheckoutSession
-     */
-    private $checkoutSession;
-
-    /**
-     * @var ItemsForReindex
-     */
-    private $itemsForReindex;
-
-    /**
-     * @var Items\Add
-     */
-    private $addItems;
-
-    /**
-     * @var Quote\Create
-     */
-    private $createQuote;
-
-    /**
-     * @var Shipping\CalculatePrice
-     */
-    private $calculateShippingPrice;
-
-    /**
-     * @var Shipping\GetMethod
-     */
-    private $getShippingMethod;
-
-    /**
-     * @var Process\CreateInvoice
-     */
-    private $createInvoice;
-
-    /**
-     * @var Process\SendOrderEmail
-     */
-    private $sendOrderEmail;
-
-    /**
-     * @var Process\CreateShipment
-     */
-    private $createShipment;
-
-    /**
-     * @var Process\AddPaymentData
-     */
-    private $addPaymentData;
-
-    /**
-     * @var Process\GetCustomIncrementId
-     */
-    private $getCustomIncrementId;
-
-    /**
-     * @var ChannableOrderRepository
-     */
-    private $channableOrderRepository;
-
-    /**
-     * @var Shipping\GetDescription
-     */
-    private $getShippingDescription;
-
-    /**
-     * @var LoggerRepository
-     */
-    private $logger;
-
-    /**
-     * Import constructor.
-     *
-     * @param ConfigProvider $configProvider
-     * @param StoreManagerInterface $storeManager
-     * @param QuoteManagement $quoteManagement
-     * @param OrderRepositoryInterface $orderRepository
-     * @param CheckoutSession $checkoutSession
-     * @param ItemsForReindex $itemsForReindex
-     * @param Items\Add $addItems
-     * @param Quote\Create $createQuote
-     * @param Shipping\CalculatePrice $calculateShippingPrice
-     * @param Shipping\GetMethod $getShippingMethod
-     * @param Shipping\GetDescription $getShippingDescription
-     * @param Process\CreateInvoice $createInvoice
-     * @param Process\CreateShipment $createShipment
-     * @param Process\AddPaymentData $addPaymentData
-     * @param Process\GetCustomIncrementId $getCustomIncrementId
-     * @param ChannableOrderRepository $channableOrderRepository
-     * @param LoggerRepository $logger
-     */
     public function __construct(
         ConfigProvider $configProvider,
         StoreManagerInterface $storeManager,
@@ -155,7 +65,7 @@ class Import
         Items\Add $addItems,
         Quote\Create $createQuote,
         Shipping\CalculatePrice $calculateShippingPrice,
-        Shipping\GetMethod $getShippingMethod,
+        Shipping\SetShippingMethod $setShippingMethod,
         Shipping\GetDescription $getShippingDescription,
         Process\SendOrderEmail $sendOrderEmail,
         Process\CreateInvoice $createInvoice,
@@ -163,7 +73,10 @@ class Import
         Process\AddPaymentData $addPaymentData,
         Process\GetCustomIncrementId $getCustomIncrementId,
         ChannableOrderRepository $channableOrderRepository,
-        LoggerRepository $logger
+        CartRepositoryInterface $quoteRepository,
+        ManagerInterface $eventManager,
+        LoggerRepository $logger,
+        CurrencyConverter $currencyConverter
     ) {
         $this->configProvider = $configProvider;
         $this->storeManager = $storeManager;
@@ -174,7 +87,7 @@ class Import
         $this->addItems = $addItems;
         $this->createQuote = $createQuote;
         $this->calculateShippingPrice = $calculateShippingPrice;
-        $this->getShippingMethod = $getShippingMethod;
+        $this->setShippingMethod = $setShippingMethod;
         $this->getShippingDescription = $getShippingDescription;
         $this->sendOrderEmail = $sendOrderEmail;
         $this->createInvoice = $createInvoice;
@@ -182,14 +95,16 @@ class Import
         $this->addPaymentData = $addPaymentData;
         $this->getCustomIncrementId = $getCustomIncrementId;
         $this->channableOrderRepository = $channableOrderRepository;
+        $this->quoteRepository = $quoteRepository;
+        $this->eventManager = $eventManager;
         $this->logger = $logger;
+        $this->currencyConverter = $currencyConverter;
     }
 
     /**
      * Create a Magento order from Channable order data
      *
      * @param ChannableOrderData $orderData
-     *
      * @return OrderInterface $order
      * @throws CouldNotImportOrder
      * @throws LocalizedException
@@ -205,28 +120,19 @@ class Import
             $store->setCurrentCurrencyCode($orderData['price']['currency']);
             $lvbOrder = $orderData['order_status'] == 'shipped';
             $quote = $this->createQuote->createCustomerQuote($orderData, $store);
-            $itemCount = $this->addItems->execute($quote, $orderData, $store, $lvbOrder);
+            $this->addItems->execute($quote, $orderData, $store, $lvbOrder);
 
             $shippingPrice = $this->calculateShippingPrice->execute($quote, $orderData, $store);
             $quote->collectTotals();
 
             $this->setCheckoutSessionData((float)$shippingPrice);
-
-            $shippingMethod = $this->getShippingMethod->execute($quote, $store, $itemCount, $shippingPrice);
-            $shippingAddress = $quote->getShippingAddress();
-            $shippingAddress->setCollectShippingRates(true)
-                ->collectShippingRates()
-                ->setShippingMethod($shippingMethod);
-
-            foreach ($shippingAddress->getShippingRatesCollection() as $rate) {
-                /** @var \Magento\Quote\Model\Quote\Address\Rate $rate */
-                $rate->setPrice($shippingPrice);
-                $rate->setCost($shippingPrice);
-            }
+            $this->setShippingMethod->execute($quote, $shippingPrice, $channableOrder);
 
             $quote->setPaymentMethod('channable');
             $quote->setInventoryProcessed(false);
-            $quote->getPayment()->importData(['method' => 'channable']);
+            $payment = $quote->getPayment();
+            $payment->setMethod('channable');
+            $payment->importData(['method' => 'channable']);
             $totals = $quote->getTotals();
 
             $quote->setTotals($totals);
@@ -236,24 +142,32 @@ class Import
             if ($customIncrementId = $this->getCustomIncrementId->execute($orderData, $store)) {
                 $quote->setReservedOrderId($customIncrementId);
             }
-
-            $quote->save();
+            
+            $this->quoteRepository->save($quote);
 
             if ($lvbOrder && $this->configProvider->disableStockMovementForLvbOrders($storeId)) {
                 $quote->setInventoryProcessed(true);
                 $this->itemsForReindex->clear();
             }
 
+            $this->eventManager->dispatch('checkout_submit_before', ['quote' => $quote]);
+
             $order = $this->quoteManagement->submit($quote);
             $order->setTransactionFee($quote->getTransactionFee());
 
             if (isset($orderData['price']['discount']) && !empty((float)$orderData['price']['discount'])) {
+                $orderCurrency = $orderData['price']['currency'] ?? '';
                 $discountAmount = abs((float)$orderData['price']['discount']);
-                $order->setDiscountDescription(__('Channable discount'));
-                $order->setBaseDiscountAmount($discountAmount);
-                $order->setDiscountAmount($discountAmount);
+                $baseDiscountAmount = $this->currencyConverter->convertToBase(
+                    $discountAmount,
+                    $orderCurrency,
+                    $storeId
+                );
+                $order->setDiscountDescription($orderData['channel_name']);
+                $order->setBaseDiscountAmount($baseDiscountAmount * -1);
+                $order->setDiscountAmount($discountAmount * -1);
                 $order->setGrandTotal($order->getGrandTotal() - $discountAmount);
-                $order->setBaseGrandTotal($order->getBaseGrandTotal() - $discountAmount);
+                $order->setBaseGrandTotal($order->getBaseGrandTotal() - $baseDiscountAmount);
             }
 
             $store->setCurrentCurrencyCode($store->getBaseCurrencyCode());
@@ -266,6 +180,9 @@ class Import
             $this->afterOrderImport($order, $storeId, $lvbOrder);
             $this->setChannableOrderImportSuccess($channableOrder, $order);
             $this->orderRepository->save($order);
+
+            $this->eventManager->dispatch('checkout_submit_all_after', ['order' => $order, 'quote' => $quote]);
+
             return $order;
         } catch (Exception $exception) {
             $couldNotImportMsg = self::COULD_NOT_IMPORT_ORDER;
@@ -296,9 +213,8 @@ class Import
      * Check if we need to invoice and ship order
      *
      * @param OrderInterface $order
-     * @param int            $storeId
-     * @param bool           $lvbOrder
-     *
+     * @param int $storeId
+     * @param bool $lvbOrder
      * @return void
      */
     private function afterOrderImport(OrderInterface $order, int $storeId, bool $lvbOrder)
@@ -325,8 +241,7 @@ class Import
      * Add 'success' data to Channable Order on successfully import
      *
      * @param ChannableOrderData $channableOrder
-     * @param OrderInterface     $order
-     *
+     * @param OrderInterface $order
      * @throws LocalizedException
      */
     public function setChannableOrderImportSuccess(ChannableOrderData $channableOrder, OrderInterface $order): void
@@ -344,7 +259,6 @@ class Import
      *
      * @param ChannableOrderData $channableOrder
      * @param string $errorMsg
-     *
      * @throws LocalizedException
      */
     public function setChannableOrderImportError(ChannableOrderData $channableOrder, string $errorMsg): void

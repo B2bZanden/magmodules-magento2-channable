@@ -223,7 +223,7 @@ class General extends AbstractHelper
      */
     private function isSerialized($value)
     {
-        return (boolean)preg_match('/^((s|i|d|b|a|O|C):|N;)/', $value);
+        return (bool)preg_match('/^((s|i|d|b|a|O|C):|N;)/', $value);
     }
 
     /**
@@ -285,11 +285,7 @@ class General extends AbstractHelper
      */
     public function getEnabled($storeId = null)
     {
-        if (isset($storeId)) {
-            return $this->getStoreValue(self::XPATH_EXTENSION_ENABLED, $storeId);
-        } else {
-            return $this->getStoreValue(self::XPATH_EXTENSION_ENABLED);
-        }
+        return $this->getStoreValue(self::XPATH_EXTENSION_ENABLED, $storeId);
     }
 
     /**

@@ -16,6 +16,7 @@ use Magmodules\Channable\Api\Config\RepositoryInterface as ConfigProvider;
 
 /**
  * Get shipping method for quote
+ * @deprecated in favor of SetShippingMethod
  */
 class GetMethod
 {
@@ -66,11 +67,6 @@ class GetMethod
     {
         $shippingMethod = $this->configProvider->getDefaultShippingMethod((int)$store->getId());
         $shippingMethodFallback = $this->configProvider->getFallbackShippingMethod((int)$store->getId());
-
-        $freeShipping = $this->configProvider->getShippingMethodFree();
-        if($freeShipping){
-            $quote->getShippingAddress()->setFreeShipping(true);
-        }
 
         $destCountryId = $quote->getShippingAddress()->getCountryId();
         $destPostcode = $quote->getShippingAddress()->getPostcode();

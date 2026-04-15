@@ -21,7 +21,8 @@
             "error_msg": true,
             "created_at": true,
             "updated_at": true,
-            "attempts": true
+            "attempts": true,
+            "shipment_method": true
         },
         "index": {
             "FTI_489FA236241E26B3CF278097F9ADE3E4": true,
@@ -47,6 +48,7 @@
             "call_result": true,
             "status": true,
             "needs_update": true,
+            "exclude_for_update": true,
             "created_at": true,
             "updated_at": true,
             "last_call": true
@@ -54,7 +56,8 @@
         "index": {
             "CHANNABLE_ITEMS_STORE_ID_ID_NEEDS_UPDATE_UPDATED_AT": true,
             "CHANNABLE_ITEMS_STORE_ID": true,
-            "CHANNABLE_ITEMS_NEEDS_UPDATE": true
+            "CHANNABLE_ITEMS_NEEDS_UPDATE": true,
+            "CHANNABLE_ITEMS_EXCLUDE_FOR_UPDATE": true
         },
         "constraint": {
             "PRIMARY": true
@@ -79,7 +82,10 @@
             "created_at": true,
             "updated_at": true,
             "entity_id": true,
-            "id": true
+            "id": true,
+            "magento_creditmemo_id": true,
+            "magento_creditmemo_increment": true,
+            "magento_creditmemo_increment_id": true
         },
         "index": {
             "IDX_8C173AFD5BA1C589364EB29DBD02F16B": true,
@@ -97,7 +103,8 @@
     },
     "sales_order": {
         "column": {
-            "transaction_fee": true
+            "transaction_fee": true,
+            "channable_pickup_location": true
         }
     },
     "sales_order_grid": {
@@ -106,6 +113,16 @@
             "channel_id": true,
             "channel_name": true,
             "channel_label": true
+        }
+    },
+    "sales_invoice": {
+        "column": {
+            "transaction_fee": true
+        }
+    },
+    "sales_creditmemo": {
+        "column": {
+            "transaction_fee": true
         }
     }
 }

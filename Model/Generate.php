@@ -7,21 +7,22 @@
 namespace Magmodules\Channable\Model;
 
 use Magento\Catalog\Model\Product;
+use Magento\Catalog\Model\ResourceModel\Product\Collection as ProductCollection;
+use Magento\Framework\App\Area;
 use Magento\Framework\Exception\LocalizedException;
+use Magento\Store\Model\App\Emulation;
+use Magmodules\Channable\Helper\Feed as FeedHelper;
+use Magmodules\Channable\Helper\General as GeneralHelper;
+use Magmodules\Channable\Helper\Product as ProductHelper;
+use Magmodules\Channable\Helper\Source as SourceHelper;
 use Magmodules\Channable\Model\Collection\Products as ProductsModel;
 use Magmodules\Channable\Model\Item as ItemModel;
-use Magmodules\Channable\Helper\Source as SourceHelper;
-use Magmodules\Channable\Helper\Product as ProductHelper;
-use Magmodules\Channable\Helper\General as GeneralHelper;
-use Magmodules\Channable\Helper\Feed as FeedHelper;
-use Magento\Framework\App\Area;
-use Magento\Store\Model\App\Emulation;
+use Magmodules\Channable\Service\Product\TierPriceData;
+use Magmodules\Channable\Service\Category\CategoryData;
+use Magmodules\Channable\Service\Product\CustomOptions;
 
 class Generate
 {
-
-    public const XPATH_FEED_RESULT = 'magmodules_channable/feeds/results';
-    public const XPATH_GENERATE = 'magmodules_channable/generate/enable';
 
     /**
      * @var ProductsModel
@@ -48,6 +49,18 @@ class Generate
      */
     private $feedHelper;
     /**
+     * @var TierPriceData
+     */
+    private $tierPriceData;
+    /**
+     * @var CustomOptions
+     */
+    private $customOptions;
+    /**
+     * @var CategoryData
+     */
+    private $categoryData;
+    /**
      * @var Emulation
      */
     private $appEmulation;
@@ -56,12 +69,15 @@ class Generate
      * Generate constructor.
      *
      * @param ProductsModel $productModel
-     * @param Item          $itemModel
-     * @param SourceHelper  $sourceHelper
+     * @param Item $itemModel
+     * @param SourceHelper $sourceHelper
      * @param ProductHelper $productHelper
      * @param GeneralHelper $generalHelper
-     * @param FeedHelper    $feedHelper
-     * @param Emulation     $appEmulation
+     * @param FeedHelper $feedHelper
+     * @param TierPriceData $tierPriceData
+     * @param CustomOptions $customOptions
+     * @param CategoryData $categoryData
+     * @param Emulation $appEmulation
      */
     public function __construct(
         ProductsModel $productModel,
@@ -70,6 +86,9 @@ class Generate
         ProductHelper $productHelper,
         GeneralHelper $generalHelper,
         FeedHelper $feedHelper,
+        TierPriceData $tierPriceData,
+        CustomOptions $customOptions,
+        CategoryData $categoryData,
         Emulation $appEmulation
     ) {
         $this->productModel = $productModel;
@@ -78,6 +97,9 @@ class Generate
         $this->sourceHelper = $sourceHelper;
         $this->generalHelper = $generalHelper;
         $this->feedHelper = $feedHelper;
+        $this->tierPriceData = $tierPriceData;
+        $this->categoryData = $categoryData;
+        $this->customOptions = $customOptions;
         $this->appEmulation = $appEmulation;
     }
 
@@ -107,10 +129,10 @@ class Generate
 
         $config = $this->sourceHelper->getConfig($storeId, $type, $currency);
         $productCollection = $this->productModel->getCollection($config, $page, $productIds);
-        $size = $this->productModel->getCollectionCountWithFilters($productCollection);
+        $size = $productCollection->getSize();
 
         if (($config['filters']['limit'] > 0) && empty($productIds)) {
-            $productCollection->setPage($page, $config['filters']['limit'])->getCurPage();
+            $productCollection->setPage($page, $config['filters']['limit']);
             $pages = ceil($size / $config['filters']['limit']);
         }
 
@@ -120,17 +142,21 @@ class Generate
             $parentRelations = $this->productHelper->getParentsFromCollection($products, $config);
             $parents = $this->productModel->getParents($parentRelations, $config);
 
+            $this->prefetchData($products, $parents, $config);
+            $config['categories'] = $this->categoryData->load($products, $parents, $storeId);
+
             foreach ($products as $product) {
                 /** @var Product $product */
                 $parent = null;
                 if (!empty($parentRelations[$product->getEntityId()])) {
                     foreach ($parentRelations[$product->getEntityId()] as $parentId) {
-                        if ($parent = $parents->getItemById($parentId)) {
-                            continue;
+                        if ($foundParent = $parents->getItemById($parentId)) {
+                            $parent = $foundParent;
                         }
                     }
                 }
                 if (!empty($productIds)) {
+                    $product->unsetData('extension_attributes');
                     $feed['product_source'] = $product->getData();
                     if (!empty($parent)) {
                         $feed['parent_source'] = $parent->getData();
@@ -206,5 +232,29 @@ class Generate
         }
 
         return null;
+    }
+
+    /**
+     * Prefetches data to reduce amount of queries required.
+     * This increases performance by a lot for environments with >1ms latency to database.
+     *
+     * @param ProductCollection $products
+     * @param ProductCollection $parents
+     * @param array $config
+     * @return void
+     */
+    private function prefetchData(
+        ProductCollection $products,
+        ProductCollection $parents,
+        array $config
+    ) {
+        $this->productHelper->getInventoryData()->load($products->getColumnValues('sku'), $config);
+        $this->productHelper->getMediaData()->load($products, $parents);
+        if (in_array('tier_price', array_column($config['attributes'], 'source'))) {
+            $this->tierPriceData->load($products, $parents, $config['website_id']);
+        }
+        if (in_array('custom_options', array_column($config['attributes'], 'source'))) {
+            $this->customOptions->load($products, $parents, $config['store_id']);
+        }
     }
 }

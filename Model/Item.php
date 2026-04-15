@@ -108,8 +108,8 @@ class Item extends AbstractModel
         ConfigProvider $configProvider,
         Context $context,
         Registry $registry,
-        AbstractResource $resource = null,
-        AbstractDb $resourceCollection = null,
+        ?AbstractResource $resource = null,
+        ?AbstractDb $resourceCollection = null,
         array $data = []
     ) {
         $this->itemFactory = $itemFactory;
@@ -256,6 +256,7 @@ class Item extends AbstractModel
         if (!empty($config['api']['webhook'])) {
             $items = $this->itemFactory->create()->getCollection()
                 ->addFieldToFilter('store_id', $storeId)
+                ->addFieldToFilter('exclude_for_update', ['neq' => 1])
                 ->setOrder('updated_at', 'ASC');
             if ($itemIds !== null) {
                 $items->addFieldToFilter('item_id', ['in' => $itemIds]);
@@ -333,6 +334,7 @@ class Item extends AbstractModel
         try {
             $productIds = $this->itemHelper->getProductIdsFromCollection($items);
             $products = $this->productModel->getCollection($config, '', $productIds);
+            $this->productHelper->getInventoryData()->load($products->getColumnValues('sku'), $config);
             $parentRelations = $this->productHelper->getParentsFromCollection($products, $config);
             $parents = $this->productModel->getParents($parentRelations, $config);
 
@@ -342,8 +344,8 @@ class Item extends AbstractModel
                 if (!empty($parentRelations[$product->getEntityId()])) {
                     foreach ($parentRelations[$product->getEntityId()] as $parentId) {
                         /** @var Product $parent */
-                        if ($parent = $parents->getItemById($parentId)) {
-                            continue;
+                        if ($foundParent = $parents->getItemById($parentId)) {
+                            $parent = $foundParent;
                         }
                     }
                 }

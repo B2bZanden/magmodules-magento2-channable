@@ -12,6 +12,7 @@
         <column name="entity_id" xsi:type="bigint" padding="20" identity="true" nullable="false" unsigned="true" comment="Entity ID"/>
         <column name="channable_id" xsi:type="int" padding="10" identity="false" nullable="false" unsigned="true" comment="Channable ID"/>
         <column name="channel_name" xsi:type="varchar" length="255" comment="Channel Name"/>
+        <column name="shipment_method" xsi:type="varchar" length="255" comment="Shipment Method"/>
         <column name="order_status" xsi:type="varchar" length="255" comment="Order Status"/>
         <column name="channel_label" xsi:type="varchar" length="255" comment="Channel Label"/>
         <column name="channel_id" xsi:type="varchar" length="255" comment="Channel ID"/>
@@ -65,12 +66,16 @@
         <column name="call_result" xsi:type="varchar" length="255" comment="Call Result"/>
         <column name="status" xsi:type="varchar" length="255" comment="Status"/>
         <column name="needs_update" xsi:type="smallint" padding="2" nullable="true" unsigned="true" identity="false" default="0" comment="Needs Update"/>
+        <column name="exclude_for_update" xsi:type="smallint" padding="2" nullable="true" unsigned="true" identity="false" default="0" comment="Exclude for Update"/>
         <column name="created_at" xsi:type="timestamp" on_update="false" default="CURRENT_TIMESTAMP" comment="Created At"/>
         <column name="updated_at" xsi:type="timestamp" on_update="true" default="CURRENT_TIMESTAMP" comment="Updated At"/>
         <column name="last_call" xsi:type="timestamp" on_update="false" comment="Updated At"/>
         <constraint xsi:type="primary" referenceId="PRIMARY">
             <column name="item_id"/>
         </constraint>
+        <index referenceId="CHANNABLE_ITEMS_EXCLUDE_FOR_UPDATE" indexType="btree">
+            <column name="exclude_for_update"/>
+        </index>
         <index referenceId="CHANNABLE_ITEMS_STORE_ID" indexType="btree">
             <column name="store_id"/>
         </index>
@@ -87,8 +92,10 @@
         <column name="channel_name" xsi:type="varchar" length="255" comment="Channel Name"/>
         <column name="channel_id" xsi:type="varchar" length="255" comment="Channel ID"/>
         <column name="channable_id" xsi:type="int" padding="10" identity="false" nullable="false" unsigned="true" comment="Channable ID"/>
-        <column name="magento_order_id" xsi:type="int" padding="10" identity="false" nullable="false" unsigned="true" comment="Magento Order ID"/>
+        <column name="magento_order_id" xsi:type="int" padding="10" identity="false" nullable="true" unsigned="true" comment="Magento Order ID"/>
         <column name="magento_increment_id" xsi:type="varchar" length="255" comment="Magento Increment Id"/>
+        <column name="magento_creditmemo_id" xsi:type="int" padding="10" identity="false" nullable="true" unsigned="true" comment="Magento Creditmemo ID"/>
+        <column name="magento_creditmemo_increment_id" xsi:type="varchar" length="255" comment="Magento Creditmemo Increment Id"/>
         <column name="item" xsi:type="text" comment="Item Info"/>
         <column name="customer_name" xsi:type="varchar" length="255" comment="Customer Name"/>
         <column name="customer" xsi:type="text" comment="Customer Info"/>
@@ -96,6 +103,10 @@
         <column name="reason" xsi:type="varchar" length="255" comment="Reason"/>
         <column name="comment" xsi:type="varchar" length="255" nullable="true" comment="Comment"/>
         <column name="status" xsi:type="varchar" length="255" comment="Status"/>
+        <column name="channel_return_id" xsi:type="varchar" length="255" nullable="true" comment="Channel Return ID"/>
+        <column name="channel_order_id" xsi:type="varchar" length="255" nullable="true" comment="Channel Order ID"/>
+        <column name="channel_order_id_internal" xsi:type="varchar" length="255" nullable="true" comment="Channel Order ID Internal"/>
+        <column name="platform_order_id" xsi:type="varchar" length="255" nullable="true" comment="Platform Order ID"/>
         <column name="id" xsi:type="int" padding="20" identity="false" nullable="false" unsigned="true" comment="Old ID"/>
         <column name="created_at" xsi:type="timestamp" on_update="false" default="CURRENT_TIMESTAMP" comment="Created At"/>
         <column name="updated_at" xsi:type="timestamp" on_update="true" default="CURRENT_TIMESTAMP" comment="Updated At"/>

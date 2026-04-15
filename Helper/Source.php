@@ -6,11 +6,11 @@
 
 namespace Magmodules\Channable\Helper;
 
+use Magento\Catalog\Model\Product\TypeFactory;
 use Magento\Framework\App\Helper\AbstractHelper;
 use Magento\Framework\App\Helper\Context;
 use Magento\Framework\Exception\NoSuchEntityException;
 use Magento\Store\Model\StoreManagerInterface;
-use Magento\Catalog\Model\Product\Visibility;
 use Magento\Framework\Exception\LocalizedException;
 use Magmodules\Channable\Service\Product\InventorySource;
 
@@ -44,6 +44,7 @@ class Source extends AbstractHelper
     const XPATH_INVENTORY = 'magmodules_channable/advanced/inventory';
     const XPATH_INVENTORY_DATA = 'magmodules_channable/advanced/inventory_fields';
     const XPATH_FORCE_NON_MSI = 'magmodules_channable/advanced/force_non_msi';
+    const XPATH_INVENTORY_SOURCE_ITEMS = 'magmodules_channable/advanced/inventory_source_items';
     const XPATH_TAX = 'magmodules_channable/advanced/tax';
     const XPATH_TAX_INCLUDE_BOTH = 'magmodules_channable/advanced/tax_include_both';
     const XPATH_MANAGE_STOCK = 'cataloginventory/item_options/manage_stock';
@@ -87,10 +88,6 @@ class Source extends AbstractHelper
      */
     private $itemHelper;
     /**
-     * @var Category
-     */
-    private $categoryHelper;
-    /**
      * @var StoreManagerInterface
      */
     private $storeManager;
@@ -99,34 +96,27 @@ class Source extends AbstractHelper
      */
     private $inventorySource;
     /**
+     * @var TypeFactory
+     */
+    private $typeFactory;
+    /**
      * @var
      */
     private $storeId = null;
 
-    /**
-     * Source constructor.
-     *
-     * @param Context               $context
-     * @param StoreManagerInterface $storeManager
-     * @param General               $generalHelper
-     * @param Category              $categoryHelper
-     * @param Product               $productHelper
-     * @param InventorySource       $inventorySource
-     * @param Item                  $itemHelper
-     */
     public function __construct(
         Context $context,
         StoreManagerInterface $storeManager,
         General $generalHelper,
-        Category $categoryHelper,
         Product $productHelper,
         InventorySource $inventorySource,
+        TypeFactory $typeFactory,
         Item $itemHelper
     ) {
         $this->generalHelper = $generalHelper;
         $this->productHelper = $productHelper;
         $this->itemHelper = $itemHelper;
-        $this->categoryHelper = $categoryHelper;
+        $this->typeFactory = $typeFactory;
         $this->storeManager = $storeManager;
         $this->inventorySource = $inventorySource;
         parent::__construct($context);
@@ -162,12 +152,6 @@ class Source extends AbstractHelper
                 $config += [
                     'base_url' => $this->storeManager->getStore()->getBaseUrl(),
                     'weight_unit' => ' ' . $this->getStoreValue(self::XPATH_WEIGHT_UNIT),
-                    'categories' => $this->categoryHelper->getCollection(
-                        $storeId,
-                        '',
-                        '',
-                        'channable_cat_disable_export'
-                    ),
                     'item_updates' =>  $this->itemHelper->isEnabled($storeId),
                     'delivery' => $this->getStoreValue(self::XPATH_DELIVERY_TIME)
                 ];
@@ -197,21 +181,28 @@ class Source extends AbstractHelper
         return $this->storeId;
     }
 
+    private function getAllProductTypeIds(): array
+    {
+        $typeInstance = $this->typeFactory->create();
+        return array_keys($typeInstance->getOptionArray());
+    }
+
     /**
      * @param $type
      *
      * @return array
      */
-    public function getProductFilters($type)
+    public function getProductFilters($type): array
     {
-        $filters = [];
-        $filters['type_id'] = ['simple', 'downloadable', 'virtual'];
-        $filters['relations'] = [];
-        $filters['exclude_parents'] = [];
-        $filters['nonvisible'] = [];
-        $filters['parent_attributes'] = [];
-        $filters['image'] = [];
-        $filters['link'] = [];
+        $filters = [
+            'type_id' => array_diff($this->getAllProductTypeIds(), ['configurable', 'bundle', 'grouped']),
+            'relations' => [],
+            'exclude_parents' => [],
+            'nonvisible' => [],
+            'parent_attributes' => [],
+            'image' => [],
+            'link' => [],
+        ];
 
         $configurabale = $this->getStoreValue(self::XPATH_CONFIGURABLE);
         switch ($configurabale) {
@@ -538,6 +529,10 @@ class Source extends AbstractHelper
         ];
 
         if ($type != 'api') {
+            $attributes['updated_at'] = [
+                'label'  => 'updated_at',
+                'source' => 'updated_at',
+            ];
             $attributes['created_at'] = [
                 'label'  => 'created_at',
                 'source' => 'created_at',
@@ -612,6 +607,14 @@ class Source extends AbstractHelper
                         'source'  => 'backorders'
                     ];
                 }
+
+                if ($this->getStoreValue(self::XPATH_INVENTORY_SOURCE_ITEMS)) {
+                    $attributes['inventory_source_items'] = [
+                        'label'   => 'inventory_source_items',
+                        'source'  => 'inventory_source_items'
+                    ];
+                }
+
             }
             $attributes['weight'] = [
                 'label'   => 'shipping_weight',
@@ -622,6 +625,7 @@ class Source extends AbstractHelper
             $attributes['item_group_id'] = [
                 'label'  => 'item_group_id',
                 'source' => $attributes['id']['source'],
+                'parent_selection_disabled' => 1,
                 'parent' => 2
             ];
             $attributes['is_bundle'] = [
@@ -791,6 +795,7 @@ class Source extends AbstractHelper
             $invAtt['stock_id'] = null;
         } else {
             $invAtt['stock_id'] = $this->inventorySource->execute($websiteCode);
+            $invAtt['inventory_source_items'] = (bool)$this->getStoreValue(self::XPATH_INVENTORY_SOURCE_ITEMS);
         }
 
         return $invAtt;
@@ -844,7 +849,12 @@ class Source extends AbstractHelper
             if (!empty($categories[$catId])) {
                 $category = $categories[$catId];
                 if (!empty($category['path'])) {
-                    $path[] = ['level' => $category['level'], 'path' => implode(' > ', $category['path'])];
+                    $path[] = [
+                        'level' => $category['level'],
+                        'id' => $catId,
+                        'path' => $category['path'],
+                        'url' => $category['url'],
+                    ];
                 }
             }
         }

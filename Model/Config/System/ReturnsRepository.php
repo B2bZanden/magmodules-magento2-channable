@@ -18,7 +18,7 @@ class ReturnsRepository extends ItemupdateRepository implements ReturnsInterface
     /**
      * {@inheritDoc}
      */
-    public function isReturnsEnabled(int $storeId = null): bool
+    public function isReturnsEnabled(?int $storeId = null): bool
     {
         return (bool)$this->getStoreValue(self::XML_PATH_RETURNS_ENABLE, (int)$storeId);
     }
@@ -30,5 +30,39 @@ class ReturnsRepository extends ItemupdateRepository implements ReturnsInterface
     {
         $url = $this->storeManager->getStore((int)$storeId)->getBaseUrl();
         return $url . sprintf('channable/returns/hook/store/%s/code/%s', $storeId, $this->getToken());
+    }
+
+    /**
+     * @inheritDoc
+     */
+    public function autoUpdateReturnsOnCreditmemo(?int $storeId = null): bool
+    {
+        return (bool)$this->getStoreValue(self::XML_PATH_RETURNS_AUTO_MATCH, (int)$storeId);
+    }
+
+    /**
+     * @inheritDoc
+     */
+    public function autoProcessCompeteReturns(?int $storeId = null): bool
+    {
+        return (bool)$this->getStoreValue(self::XML_PATH_RETURNS_AUTO_PROCESS, (int)$storeId);
+    }
+
+    /**
+     * @inheritDoc
+     */
+    public function showOnCreditmemoCreation(?int $storeId = null): bool
+    {
+        return $this->getStoreValue(self::XML_PATH_RETURNS_CREDITMEMO, $storeId)
+            && $this->isReturnsEnabled($storeId);
+    }
+
+    /**
+     * @param int|null $storeId
+     * @return string
+     */
+    public function getGtinAttribute(?int $storeId = null): string
+    {
+        return $this->getStoreValue(self::XML_PATH_GTIN_ATTRIBUTE, (int)$storeId) ?: 'sku';
     }
 }

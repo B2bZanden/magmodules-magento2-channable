@@ -78,7 +78,7 @@ class Repository implements ChannableOrderRepository
         ChannableOrderCollectionFactory $channableOrderCollectionFactory,
         JoinProcessorInterface $extensionAttributesJoinProcessor,
         ChannableOrderResource $channableOrderResource,
-        CollectionProcessorInterface $collectionProcessor = null
+        ?CollectionProcessorInterface $collectionProcessor = null
     ) {
         $this->channableOrderResource = $channableOrderResource;
         $this->metadata = $metadata;
@@ -165,10 +165,16 @@ class Repository implements ChannableOrderRepository
      */
     public function createByDataArray(array $orderData, int $storeId): DataInterface
     {
-        $channableOrderId = $this->getByChannableId((int)$orderData['channable_id']);
+        $channableOrderId = $this->getByChannableId((int)$orderData['channable_id'], $storeId);
         if ($channableOrderId) {
             $channableOrder = $this->get((int)$channableOrderId);
             $channableOrder->setAttempts($channableOrder->getAttempts() + 1);
+
+            // Add some non-saved data back to orders array
+            $channableOrder['channable_channel_label'] = $orderData['channable_channel_label'];
+            $channableOrder['shipment_method'] = $orderData['shipment_method'];
+            $channableOrder['shipment_promise'] = $orderData['shipment_promise'];
+            $channableOrder['memo'] = $orderData['memo'];
         } else {
             $orderData['attempts'] = 1;
             $orderData['store_id'] = $storeId;
@@ -184,9 +190,9 @@ class Repository implements ChannableOrderRepository
     /**
      * {@inheritDoc}
      */
-    public function getByChannableId(int $channableId)
+    public function getByChannableId(int $channableId, ?int $storeId = null)
     {
-        return $this->channableOrderResource->getByChannableId($channableId);
+        return $this->channableOrderResource->getByChannableId($channableId, $storeId);
     }
 
     /**
